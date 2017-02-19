@@ -4,13 +4,13 @@ set -o pipefail
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-BRIDGE=${BRIDGE:-virbr0}
+BRIDGE=${BRIDGE:-virbr1}
 GPG=${GPG:-/usr/bin/gpg}
 VOLUME_POOL=default
 VOLUME_DIR=/var/lib/libvirt/images
 
-CHANNEL=alpha
-VERSION=1313.0.0
+CHANNEL=stable
+VERSION=1235.9.0
 BASE_URL=https://$CHANNEL.release.core-os.net/amd64-usr/$VERSION
 
 function main {
@@ -81,25 +81,44 @@ function init {
 }
 
 # TODO: Derive node list and user-data from coreos-baremetal examples
-nodes=(node1 node2 node3)
-
-# Generate user_data for nodes
-function userdata {
-  require_user
-
-  for node in ${nodes[@]}; do
-    if [ ! -d data ]; then
-      mkdir -p data
-    fi
-    find_ssh_keys | write_ssh_keys > data/$node.ign
-  done
-}
+nodes=(1 2)
 
 # Create a cluster nodes
 function create {
   require_sudo
-  for node in ${nodes[@]}; do
-    create_vm $node
+  for n in ${nodes[@]}; do
+    cp node.yaml data/node$n.yaml
+    cat <<EOF >>data/node$n.yaml
+
+storage:
+  files:
+    - path: /etc/node.env
+      filesystem: root
+      contents:
+        inline: |
+          NODE_INDEX=${n}
+          DOCKER_OPT_BIP=--bip 10.2.${n}.1/25
+
+networkd:
+  units:
+    - name: eth0.network
+      contents: |
+        [Match]
+        Name=eth0
+
+        [Network]
+        Address=10.1.1.$((1+${n}))/24
+        Gateway=10.1.1.1
+        DNS=10.1.1.1
+
+        [Route]
+        Gateway=10.1.1.1
+        Destination=10.2.0.0/16
+EOF
+
+    cat data/node$n.yaml | ct -pretty >data/node$n.ign 
+    create_vm node$n
+    ip route add 10.2.${n}.0/24 via 10.1.1.$((1+${n})) dev virbr1
   done
 }
 
@@ -134,78 +153,29 @@ function create_vm {
 
 function create_disk {
   NODE=$1
-  if [ ! -f $VOLUME_DIR/$NODE.qcow2 ]; then
-    # create a copy-on-write image based on the CoreOS QEMU image
-    qemu-img create -f qcow2 -o backing_file=$VOLUME_DIR/coreos_production_qemu_image.img $VOLUME_DIR/$NODE.qcow2
-  fi
-}
-
-# Start cluster nodes
-function start {
-  require_sudo
-  for node in ${nodes[@]}; do
-    virsh start $node
-  done
-}
-
-# Reboot cluster nodes
-function reboot {
-  require_sudo
-  for node in ${nodes[@]}; do
-    virsh reboot $node
-  done
-}
-
-# Shutdown cluster nodes
-function shutdown {
-  require_sudo
-  for node in ${nodes[@]}; do
-    virsh shutdown $node
-  done
-}
-
-# Poweroff cluster nodes
-function poweroff {
-  require_sudo
-  for node in ${nodes[@]}; do
-    virsh destroy $node
-  done
+  # create a copy-on-write image based on the CoreOS QEMU image
+  qemu-img create -f qcow2 -o backing_file=$VOLUME_DIR/coreos_production_qemu_image.img $VOLUME_DIR/$NODE.qcow2
 }
 
 # Destroy cluster nodes
 function destroy {
+  set -x
+
   require_sudo
   for node in ${nodes[@]}; do
-    virsh destroy $node
+    virsh destroy node$node
   done
   for node in ${nodes[@]}; do
-    virsh undefine $node
+    virsh undefine node$node
   done
   virsh pool-refresh default
   for node in ${nodes[@]}; do
-    virsh vol-delete --pool $VOLUME_POOL $node.qcow2
-    virsh vol-delete --pool $VOLUME_POOL $node.ign
+    virsh vol-delete --pool $VOLUME_POOL node$node.qcow2
+    virsh vol-delete --pool $VOLUME_POOL node$node.ign
   done
-}
-
-function find_ssh_keys {
-  if [ -S "$SSH_AUTH_SOCK" ]; then
-    ssh-add -L
-  fi
-  for default_key in ~/.ssh/id_*.pub; do
-    if [ ! -f "$default_key" ]; then
-        continue
-    fi
-    cat "$default_key"
+  for node in ${nodes[@]}; do
+    ip route del 10.2.${node}.0/24 via 10.1.1.$((1+${node})) dev virbr1
   done
-}
-
-function write_ssh_keys {
-  echo -n '{"ignition": { "version": "2.0.0" },"passwd": {"users": [{"name": "core", "sshAuthorizedKeys": ['
-  readarray keys
-  out=$(printf ',"%s"\n' "${keys[@]}")
-  echo -n ${out:1}
-  echo ']}]}}'
 }
 
 main $@
