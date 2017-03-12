@@ -1,6 +1,54 @@
 ---
 systemd:
   units:
+    - name: kubelet-fetch.service
+      enable: true
+      contents: |
+        [Unit]
+        Wants=network-online.target
+        After=network-online.target
+
+        [Install]
+        WantedBy=multi-user.target
+
+        [Service]
+        Type=oneshot
+        RemainAfterExit=true
+        EnvironmentFile=/etc/node.env
+        ExecStartPre=/usr/bin/curl \
+          --silent --show-error -L \
+          -o /hyperkube http://dl.k8s.io/v1.5.4/bin/linux/amd64/hyperkube
+        ExecStart=/usr/bin/chmod 555 /hyperkube
+
+    - name: kubelet.service
+      enable: true
+      contents: |
+        [Service]
+        EnvironmentFile=/etc/node.env
+        ExecStart=/hyperkube kubelet \
+          --address=${IP_INT} \
+          --hostname-override=${IP_INT} \
+          --read-only-port=0 \
+          \
+          --kubeconfig=/etc/kubernetes/kubeconfig \
+          --require-kubeconfig=true \
+          \
+          --anonymous-auth=false \
+          --client-ca-file=/etc/kubernetes/tls/ca.crt \
+          --authorization-mode=Webhook \
+          \
+          --cluster-dns=10.3.0.10 \
+          --cluster-domain=cluster.local
+        Restart=always
+        RestartSec=10
+
+        [Unit]
+        Requires=kubelet-fetch.service
+        After=kubelet-fetch.service
+
+        [Install]
+        WantedBy=multi-user.target
+
     - name: docker.service
       enable: true
       dropins:

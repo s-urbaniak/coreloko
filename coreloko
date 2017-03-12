@@ -4,13 +4,15 @@ set -o pipefail
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
+K8S_VERSION=${K8S_VERSION:-v1.5.4}
+HYPERKUBE_SHA512=${HYPERKUBE_SHA512:-b9f620cba594a2b184a617fed01a0f8e6a84c0fd1f0edd365e2aacb66049e7b6040e04de5f276c5c4c372bbdf9bc0477e5a72e988f4e3dc7db389c44a8391b96}
 BRIDGE=${BRIDGE:-virbr1}
 GPG=${GPG:-/usr/bin/gpg}
 VOLUME_POOL=default
 VOLUME_DIR=/var/lib/libvirt/images
 
 CHANNEL=stable
-VERSION=1235.9.0
+VERSION=1298.5.0
 BASE_URL=https://$CHANNEL.release.core-os.net/amd64-usr/$VERSION
 
 function main {
@@ -81,21 +83,35 @@ function init {
 }
 
 # TODO: Derive node list and user-data from coreos-baremetal examples
-nodes=(1 2)
+nodes=(1 2 3)
 
 # Create a cluster nodes
 function create {
   require_sudo
+  mkdir -p data
   for n in ${nodes[@]}; do
     cp node.yaml data/node$n.yaml
     cat <<EOF >>data/node$n.yaml
 
 storage:
   files:
+    - path: /etc/kubernetes/kubeconfig
+      filesystem: root
+      contents:
+        remote:
+          url: data:text/plain;charset=utf-8;base64,$(base64 --wrap=0 /etc/kubernetes/kubeconfig)
+
+    - path: /etc/kubernetes/tls/ca.crt
+      filesystem: root
+      contents:
+        remote:
+          url: data:text/plain;charset=utf-8;base64,$(base64 --wrap=0 /etc/kubernetes/tls/ca.crt)
+
     - path: /etc/node.env
       filesystem: root
       contents:
         inline: |
+          IP_INT=10.1.1.$((1+${n}))
           NODE_INDEX=${n}
           DOCKER_OPT_BIP=--bip 10.2.${n}.1/25
 
