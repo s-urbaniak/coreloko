@@ -12,13 +12,12 @@ VOLUME_POOL=default
 VOLUME_DIR=/var/lib/libvirt/images
 
 CHANNEL=stable
-VERSION=1298.5.0
+VERSION=1465.6.0
 BASE_URL=https://$CHANNEL.release.core-os.net/amd64-usr/$VERSION
 
 function main {
   case "$1" in
     "init") init;;
-    "userdata") userdata;;
     "create") create;;
     "start") start;;
     "reboot") reboot;;
@@ -36,7 +35,6 @@ function usage {
   echo "USAGE: ${0##*/} <command>"
   echo "Commands:"
   echo -e "\tinit\t\tdownload and verify CoreOS images"
-  echo -e "\tuserdata\tgenerate userdata for nodes"
   echo -e "\tcreate\t\tcreate QEMU/KVM nodes"
   echo -e "\tstart\t\tstart the QEMU/KVM nodes"
   echo -e "\treboot\t\treboot the QEMU/KVM nodes"
@@ -83,7 +81,7 @@ function init {
 }
 
 # TODO: Derive node list and user-data from coreos-baremetal examples
-nodes=(1 2 3)
+nodes=(1)
 
 # Create a cluster nodes
 function create {
@@ -92,28 +90,6 @@ function create {
   for n in ${nodes[@]}; do
     cp node.yaml data/node$n.yaml
     cat <<EOF >>data/node$n.yaml
-
-storage:
-  files:
-    - path: /etc/kubernetes/kubeconfig
-      filesystem: root
-      contents:
-        remote:
-          url: data:text/plain;charset=utf-8;base64,$(base64 --wrap=0 /etc/kubernetes/kubeconfig)
-
-    - path: /etc/kubernetes/tls/ca.crt
-      filesystem: root
-      contents:
-        remote:
-          url: data:text/plain;charset=utf-8;base64,$(base64 --wrap=0 /etc/kubernetes/tls/ca.crt)
-
-    - path: /etc/node.env
-      filesystem: root
-      contents:
-        inline: |
-          IP_INT=10.1.1.$((1+${n}))
-          NODE_INDEX=${n}
-          DOCKER_OPT_BIP=--bip 10.2.${n}.1/25
 
 networkd:
   units:
