@@ -4,3 +4,59 @@ passwd:
     - name: core
       ssh_authorized_keys:
       - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC21bckLBPaOxmx5mNJEX29nes0fkR9NdHGEPnRdaL2e1lWDNvp1Q4db72yz7cg0MLEsuGXkfZ1y0g96KnQ081f3FgYMRz/GBjoxeKaTxA/ju/T2/TXTv0DJPvu0Qd5QdzyR9qC6lt/mO8f2yoEZ1kiG2XU/UQmEf1kI+MlYsjixDlSwHD4f08zK0sXt0GPA9uSoX+jeWHVFj1MsPUYT3Qs1CO+ksTW6zvoUm9tcV0+KHJoFDd+2llUfijgTyCrHvo1/sH2sjsZpnp0MSm28KgvzFR9AFXp5dzAposm6E3JAtcSP2Q7EZm+CgIgMOqSAs8nbdi32XCT0ZvtE6bQlx4r
+
+systemd:
+  units:
+    - name: kubelet-init.service
+      enable: true
+      contents: |
+        [Unit]
+        Requires=network-online.target
+        After=network-online.target
+        ConditionPathExists=!/opt/bin/hyperkube
+
+        [Install]
+        WantedBy=multi-user.target
+
+        [Service]
+        Type=oneshot
+        RemainAfterExit=true
+        ExecStartPre=/usr/bin/mkdir -p /opt/bin
+        ExecStart=/usr/bin/cp /media/configvirtfs/usr/bin/hyperkube /opt/bin/hyperkube
+
+    - name: kubelet.service
+      enable: true
+      contents: |
+        [Service]
+        EnvironmentFile=/etc/node.env
+        ExecStart=/opt/bin/hyperkube kubelet \
+          --address=${IP_INT} \
+          --hostname-override=${IP_INT} \
+          --read-only-port=0 \
+          \
+          --kubeconfig=/etc/kubernetes/kubeconfig \
+          --require-kubeconfig=true \
+          \
+          --anonymous-auth=false \
+          --client-ca-file=/etc/kubernetes/tls/ca.crt \
+          \
+          --cluster-dns=10.3.0.10 \
+          --cluster-domain=cluster.local
+        Restart=always
+        RestartSec=10
+
+        [Unit]
+        Requires=kubelet-init.service
+        After=kubelet-init.service
+
+        [Install]
+        WantedBy=multi-user.target
+
+    - name: docker.service
+      enable: true
+      dropins:
+        - name: 10-overlay.conf
+          contents: |
+            [Service]
+            EnvironmentFile=/etc/node.env
+            Environment="DOCKER_OPTS=--storage-driver=overlay2"
