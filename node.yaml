@@ -29,6 +29,7 @@ systemd:
       contents: |
         [Service]
         EnvironmentFile=/etc/node.env
+
         ExecStart=/opt/bin/hyperkube kubelet \
           --address=${IP_INT} \
           --hostname-override=${IP_INT} \
@@ -41,7 +42,9 @@ systemd:
           --client-ca-file=/etc/kubernetes/tls/ca.crt \
           \
           --cluster-dns=10.3.0.10 \
-          --cluster-domain=cluster.local
+          --cluster-domain=cluster.local \
+          --allow-privileged=true
+
         Restart=always
         RestartSec=10
 
