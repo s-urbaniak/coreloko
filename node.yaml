@@ -5,8 +5,33 @@ passwd:
       ssh_authorized_keys:
       - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC21bckLBPaOxmx5mNJEX29nes0fkR9NdHGEPnRdaL2e1lWDNvp1Q4db72yz7cg0MLEsuGXkfZ1y0g96KnQ081f3FgYMRz/GBjoxeKaTxA/ju/T2/TXTv0DJPvu0Qd5QdzyR9qC6lt/mO8f2yoEZ1kiG2XU/UQmEf1kI+MlYsjixDlSwHD4f08zK0sXt0GPA9uSoX+jeWHVFj1MsPUYT3Qs1CO+ksTW6zvoUm9tcV0+KHJoFDd+2llUfijgTyCrHvo1/sH2sjsZpnp0MSm28KgvzFR9AFXp5dzAposm6E3JAtcSP2Q7EZm+CgIgMOqSAs8nbdi32XCT0ZvtE6bQlx4r
 
+storage:
+  disks:
+    - device: "/dev/vdb"
+      wipeTable: true
+      partitions:
+        - label: "pv1"
+          number: 1
+          start: 0
+
+  filesystems:
+    - mount:
+        device: "/dev/vdb1"
+        format: "ext4"
+        wipe_filesystem: true
+
 systemd:
   units:
+    - name: "mnt-disks-pv1.mount"
+      enable: true
+      contents: |
+        [Mount]
+        What=/dev/vdb1
+        Where=/mnt/disks/pv1
+
+        [Install]
+        WantedBy=local-fs.target
+
     - name: kubelet-init.service
       enable: true
       contents: |

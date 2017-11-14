@@ -80,7 +80,7 @@ function init {
   rm $VOLUME_DIR/coreos_production_qemu_image.img.bz2.sig
 }
 
-nodes=(1 2)
+nodes=(1)
 
 # Create a cluster nodes
 function create {
@@ -150,6 +150,7 @@ function create_vm {
       --vcpus=1 \
       --memory=1024 \
       --disk path=$VOLUME_DIR/$NODE.qcow2,format=qcow2,bus=virtio \
+      --disk path=$VOLUME_DIR/${NODE}_pv.qcow2,format=qcow2,bus=virtio \
       --network=bridge:$BRIDGE \
       --boot hd \
       --os-type=linux \
@@ -168,6 +169,7 @@ function create_disk {
   NODE=$1
   # create a copy-on-write image based on the CoreOS QEMU image
   qemu-img create -f qcow2 -o backing_file=$VOLUME_DIR/coreos_production_qemu_image.img $VOLUME_DIR/$NODE.qcow2
+  qemu-img create -f qcow2 -o size=10G $VOLUME_DIR/${NODE}_pv.qcow2
 }
 
 # Destroy cluster nodes
@@ -184,6 +186,7 @@ function destroy {
   virsh pool-refresh default
   for node in ${nodes[@]}; do
     virsh vol-delete --pool $VOLUME_POOL node$node.qcow2
+    virsh vol-delete --pool $VOLUME_POOL node${node}_pv.qcow2
     virsh vol-delete --pool $VOLUME_POOL node$node.ign
   done
   for node in ${nodes[@]}; do
