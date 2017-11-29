@@ -7,27 +7,28 @@ passwd:
 
 storage:
   disks:
-    - device: "/dev/vdb"
+    - device: "/dev/disk/by-id/virtio-HD1"
       wipeTable: true
       partitions:
-        - label: "pv1"
+        - label: "HD1-1"
           number: 1
           start: 0
 
   filesystems:
     - mount:
-        device: "/dev/vdb1"
+        device: "/dev/disk/by-partlabel/HD1-1"
         format: "ext4"
+        label: "PV1"
         wipe_filesystem: true
 
 systemd:
   units:
-    - name: "mnt-disks-pv1.mount"
+    - name: "mnt-disks-PV1.mount"
       enable: true
       contents: |
         [Mount]
-        What=/dev/vdb1
-        Where=/mnt/disks/pv1
+        What=/dev/disk/by-label/PV1
+        Where=/mnt/disks/PV1
 
         [Install]
         WantedBy=local-fs.target
@@ -68,7 +69,8 @@ systemd:
           \
           --cluster-dns=10.3.0.10 \
           --cluster-domain=cluster.local \
-          --allow-privileged=true
+          --allow-privileged=true \
+          --feature-gates=PersistentLocalVolumes=true
 
         Restart=always
         RestartSec=10
